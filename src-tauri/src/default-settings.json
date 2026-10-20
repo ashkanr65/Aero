@@ -1,0 +1,129 @@
+{
+  "appearance": {
+    "theme": "system",
+    "verticalTabs": true,
+    "compactTabs": false,
+    "sidebarOpen": true,
+    "aeroIdentity": true,
+    "showHomeButton": true,
+    "showFavoritesBar": false,
+    "disableGpu": false
+  },
+  "startup": {
+    "homePage": "https://duckduckgo.com/",
+    "openHomeOnStartup": true
+  },
+  "search": {
+    "engine": "duckduckgo",
+    "suggestions": true
+  },
+  "privacy": {
+    "trackingLevel": "balanced",
+    "blockThirdPartyCookies": true,
+    "upgradeHttps": true,
+    "globalPrivacyControl": true,
+    "doNotTrack": true,
+    "fingerprintProtection": true,
+    "clearOnExit": false
+  },
+  "shields": {
+    "blockScripts": false,
+    "blockAdNetworks": true,
+    "blockAnalytics": true,
+    "blockSessionReplay": true,
+    "blockErrorMonitoring": true,
+    "blockBannerAds": true,
+    "blockYoutubeVideoAds": true,
+    "hideAdElements": true
+  },
+  "downloads": {
+    "directory": "",
+    "askWhereToSave": true
+  },
+  "performance": {
+    "sleepingTabs": true,
+    "sleepAfterMinutes": 15,
+    "efficiencyMode": true
+  },
+  "content": {
+    "spellcheck": true
+  },
+  "permissions": {
+    "camera": false,
+    "microphone": false,
+    "geolocation": false,
+    "notifications": false,
+    "fullscreen": true,
+    "clipboard": true
+  },
+  "accessibility": {
+    "pageZoom": 100
+  },
+  "layout": {
+    "leftSidebarWidth": 240,
+    "rightSidebarWidth": 310
+  },
+  "tabs": {
+    "location": "left",
+    "groups": true
+  },
+  "shortcuts": {
+    "mapping": {
+      "reopen-tab": "Ctrl+Shift+T",
+      "new-private-window": "Ctrl+Shift+N",
+      "close-window": "Ctrl+Shift+W",
+      "duplicate-tab": "Ctrl+Shift+K",
+      "hard-reload": "Ctrl+Shift+R",
+      "clear-data": "Ctrl+Shift+Delete",
+      "tab-search": "Ctrl+Shift+A",
+      "favorites": "Ctrl+Shift+O",
+      "toggle-favorites-bar": "Ctrl+B",
+      "paste-and-go": "Ctrl+Shift+L",
+      "devtools": "Ctrl+Shift+I",
+      "toggle-sidebar": "Ctrl+E",
+      "capture-page": "Ctrl+Shift+S",
+      "read-aloud": "Ctrl+Shift+U",
+      "collections": "Ctrl+Shift+Y",
+      "print-system": "Ctrl+P",
+      "save-all-favorites": "Ctrl+Shift+D",
+      "paste-plain": "Ctrl+V",
+      "focus-settings": "Alt+Shift+I",
+      "focus-toolbar": "Alt+Shift+T",
+      "focus-favorites": "Alt+Shift+B",
+      "focus-browser": "Ctrl+F6",
+      "open-password-manager": "Ctrl+Shift+P",
+      "new-tab": "Ctrl+T",
+      "new-window": "Ctrl+N",
+      "close-tab": "Ctrl+W",
+      "focus-address": "Ctrl+L",
+      "next-tab": "Ctrl+Tab",
+      "previous-tab": "Ctrl+Shift+Tab",
+      "select-tab": "Ctrl+1",
+      "reload": "Ctrl+R",
+      "back": "Alt+Left",
+      "forward": "Alt+Right",
+      "home": "Alt+Home",
+      "find": "Ctrl+F",
+      "find-next": "Ctrl+G",
+      "find-previous": "Ctrl+Shift+G",
+      "history": "Ctrl+H",
+      "downloads": "Ctrl+J",
+      "add-favorite": "Ctrl+D",
+      "print": "Ctrl+P",
+      "save-page": "Ctrl+S",
+      "open-file": "Ctrl+O",
+      "view-source": "Ctrl+U",
+      "zoom-in": "Ctrl+Plus",
+      "zoom-out": "Ctrl+Minus",
+      "zoom-reset": "Ctrl+0",
+      "mute-tab": "Ctrl+M",
+      "settings": "Alt+F",
+      "open-url-new-tab": "Alt+Enter",
+      "fullscreen": "F11",
+      "reader": "F9",
+      "stop": "Escape",
+      "help": "F1"
+    },
+    "resetToDefault": false
+  }
+}

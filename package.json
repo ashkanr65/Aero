@@ -1,0 +1,36 @@
+{
+  "name": "aero-rust-browser",
+  "version": "1.0.3",
+  "private": true,
+  "type": "module",
+  "description": "Aero Browser with a native Rust/Tauri backend",
+  "scripts": {
+    "dev": "vite --port 5174 --strictPort",
+    "build": "tsc --noEmit && vite build",
+    "tauri": "tauri",
+    "dev:desktop": "tauri dev",
+    "build:desktop": "tauri build",
+    "package:portable": "tauri build --no-bundle && node scripts/stage-portable.cjs",
+    "test": "npm run build && npm run test:settings && cargo test --manifest-path src-tauri/Cargo.toml --locked && npm run test:native",
+    "test:native": "cargo build --manifest-path src-tauri/Cargo.toml --features custom-protocol --locked && node scripts/native-smoke.cjs",
+    "test:settings": "node --test scripts/browsing-data.test.cjs scripts/import-data.test.cjs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.3",
+    "lucide-react": "^0.312.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.2",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^6.4.4",
+    "@vitejs/plugin-react": "^4.2.1",
+    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33"
+  }
+}

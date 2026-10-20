@@ -1,0 +1,12 @@
+{
+  "identifier": "shell",
+  "description": "Local Aero interface only; browsing webviews have no core permissions",
+  "webviews": [
+    "shell-*",
+    "vault-*"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging"
+  ]
+}
