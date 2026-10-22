@@ -1,0 +1,16 @@
+const fs=require('node:fs');
+const next=process.argv[2];
+if(!next || next.length>32 || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(next))throw Error('Use a stable version such as 1.0.5.');
+const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+const tauri=JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));
+let cargo=fs.readFileSync('src-tauri/Cargo.toml','utf8');
+let cargoLock=fs.readFileSync('Cargo.lock','utf8');
+const packageEntry=/(\[\[package\]\]\r?\nname = "aero-rust-browser"\r?\nversion = ")[^"]+("\r?\n)/;
+if(!packageEntry.test(cargoLock))throw Error('Aero entry is missing from Cargo.lock.');
+cargo=cargo.replace(/(\[package\][\s\S]*?\r?\nversion = ")[^"]+(")/,(_,a,b)=>a+next+b);
+cargoLock=cargoLock.replace(packageEntry,(_,a,b)=>a+next+b);
+pkg.version=next;lock.version=next;lock.packages[''].version=next;tauri.version=next;
+for(const [file,value] of [['package.json',pkg],['package-lock.json',lock],['src-tauri/tauri.conf.json',tauri]])fs.writeFileSync(file,JSON.stringify(value,null,2)+'\n');
+fs.writeFileSync('src-tauri/Cargo.toml',cargo);fs.writeFileSync('Cargo.lock',cargoLock);
+console.log(`Aero release version set to ${next}. Commit and tag the source before publishing.`);

@@ -930,4 +930,27 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"corrupted");
         fs::remove_dir_all(dir).unwrap();
     }
+    #[test]
+    #[cfg(windows)]
+    fn synthetic_csv_import_encrypts_deduplicates_and_preserves_failed_vaults() {
+        let dir=std::env::temp_dir().join(format!("aero-csv-backend-{}",Uuid::new_v4()));fs::create_dir_all(&dir).unwrap();
+        let path=dir.join("vault.json");let hwnd=765432109isize;let epoch=auth_epoch(hwnd).unwrap();
+        let parsed=crate::password_transfer::parse(b"url,username,password\nhttps://example.test/login,synthetic-user,synthetic-export-secret\n").unwrap();
+        let input=zeroize::Zeroizing::new(parsed.payload.to_string());
+        let imported=perform_authenticated_operation("import",&input,&path,hwnd,epoch).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&imported).unwrap()["imported"],1);
+        assert!(!String::from_utf8_lossy(&fs::read(&path).unwrap()).contains("synthetic-export-secret"));
+        perform_authenticated_operation("import",&input,&path,hwnd,epoch).unwrap();
+        let listed=perform_authenticated_operation("list","{}",&path,hwnd,epoch).unwrap();
+        let list:serde_json::Value=serde_json::from_str(&listed).unwrap();assert_eq!(list.as_array().unwrap().len(),1);assert!(!listed.contains("synthetic-export-secret"));
+        let selection=serde_json::json!({"id":list[0]["id"]}).to_string();
+        let revealed=perform_authenticated_operation("reveal",&selection,&path,hwnd,epoch).unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&revealed).unwrap()["password"],"synthetic-export-secret");
+        let original=fs::read(&path).unwrap();
+        AUTH_EPOCHS.get_or_init(||Mutex::new(HashMap::new())).lock().unwrap().insert(hwnd,epoch+1);
+        assert!(perform_authenticated_operation("import",&input,&path,hwnd,epoch).is_err());assert_eq!(fs::read(&path).unwrap(),original);
+        fs::write(&path,b"corrupted").unwrap();assert!(perform_authenticated_operation("import",&input,&path,hwnd,epoch+1).is_err());assert_eq!(fs::read(&path).unwrap(),b"corrupted");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
 }

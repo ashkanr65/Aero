@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Aero Browser Rust",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "identifier": "com.aero.rust.browser",
   "build": {
     "frontendDist": "../dist",
@@ -27,6 +27,11 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   }
 }

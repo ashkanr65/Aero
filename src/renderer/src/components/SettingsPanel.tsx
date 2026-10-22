@@ -1,3 +1,4 @@
+import type { UpdateStatus } from '../../../preload/index';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Gauge, Keyboard, Palette, RotateCcw, Search, Settings, Shield, X, Import } from 'lucide-react';
 import type { BrowserSettings } from '../../../shared/settings';
@@ -85,6 +86,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onChange
     if (section === 'privacy' && clearRequest > 0) document.getElementById('clear-browsing-data')?.scrollIntoView({ block: 'start' });
   }, [section, clearRequest]);
   const [filter, setFilter] = useState('');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  useEffect(() => {
+    let disposed = false;
+    void window.aero.getUpdateStatus().then(value => { if (!disposed) setUpdateStatus(value); });
+    const off = window.aero.onUpdateStatus(value => { if (!disposed) setUpdateStatus(value); });
+    return () => { disposed = true; off(); };
+  }, []);
   const [editingId, setEditingId] = useState<BrowserShortcutAction | null>(null);
   const update = <Section extends keyof BrowserSettings>(name: Section, patch: Partial<BrowserSettings[Section]>) => {
     onChange({ ...settings, [name]: { ...settings[name], ...patch } });
@@ -199,6 +207,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onChange
           </div>}
 
           {section === 'performance' && <div className="settings-stack">
+            <SettingsCard title="Automatic updates"><div className="setting-row" data-aero-updates><span className="flex-1"><strong>Aero {updateStatus?.version ?? ''}</strong><small>{updateStatus?.message ?? 'Automatic updates are on. Keep browsing normally.'}</small><small>New versions download quietly and open the next time you start Aero. Your bookmarks, history and settings stay in the same profile.</small></span></div></SettingsCard>
             <SettingsCard title="Aero RAM Manager">
               <Toggle checked={settings.performance.sleepingTabs} onChange={value => update('performance', { sleepingTabs: value })} label="Put inactive tabs to sleep" description="Discarded tabs release their Chromium renderer and reload when selected." />
               <label className="setting-field"><span>Sleep inactive tabs after</span><select disabled={!settings.performance.sleepingTabs} value={settings.performance.sleepAfterMinutes} onChange={event => update('performance', { sleepAfterMinutes: Number(event.target.value) })}><option value={5}>5 minutes</option><option value={15}>15 minutes</option><option value={30}>30 minutes</option><option value={60}>1 hour</option></select></label>

@@ -1,7 +1,14 @@
 node_modules/
 target/
 dist/
-portable/*.exe
 portable/AeroData/
 *.log
 .vscode/
+
+# Update payloads and publisher-only material
+release/
+.aero-updates/
+*.dpapi
+*.pem
+*.pfx
+*.key

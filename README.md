@@ -12,7 +12,7 @@ Verified recovery archives of the old source/Git history and old browser profile
 
 ## Run the finished app
 
-Open `portable/Aero-Rust-Portable-1.0.3-x64.exe`. This is the current portable release.
+Open `portable/Aero-Rust-Portable-1.0.4-x64.exe`. This is the current portable release.
 
 The Microsoft Edge WebView2 Evergreen Runtime must be installed. It is present on this development computer. The portable executable does not bundle an entire browser engine. See [Microsoft's runtime distribution guidance](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution).
 
@@ -28,11 +28,11 @@ npm test
 npm run package:portable
 ```
 
-The portable output is `portable/Aero-Rust-Portable-1.0.3-x64.exe`. `npm run build` only builds the interface; it does not create an executable. `npm run dev:desktop` launches development mode. `npm run build:desktop` also builds an NSIS installer. `cargo build` from the project root now builds the real browser workspace rather than the old console demo.
+The portable output is `portable/Aero-Rust-Portable-1.0.4-x64.exe`. `npm run build` only builds the interface; it does not create an executable. `npm run dev:desktop` launches development mode. `npm run build:desktop` also builds an NSIS installer. `cargo build` from the project root now builds the real browser workspace rather than the old console demo.
 
 ## Browser controls
 
-In **Settings > Import browser data**, choose a browser to detect its profiles automatically. Select a profile only when more than one is found, then choose bookmarks/history and press **Import selected data**. Locked history is read through a checked snapshot where possible. Passwords use a guided source-browser export followed by Aero Password Manager's authenticated import. See [IMPORT-UPDATE.md](IMPORT-UPDATE.md) for details, test results, and limitations.
+In **Settings > Import browser data**, choose a browser to detect its profiles automatically. Select a profile only when more than one is found, then choose bookmarks/history and press **Import selected data**. Locked history is read through a checked snapshot where possible. Choose **Transfer passwords** to open the selected browser's password settings and Aero Password Manager. Approve an export in the source browser and save a new CSV in Downloads; Aero detects it automatically. Confirm the filename and Windows Hello to encrypt the import. A file chooser supports other save locations. See [IMPORT-UPDATE.md](IMPORT-UPDATE.md) for details, test results, and limitations.
 
 The interface, styles, and original Aero icons come from the reference Aero project. Tabs support dragging, ordering, right-click actions, moving between split panes, adjustable pane widths, and audio muting. Settings stay below the window controls. Drag an empty part of the titlebar to move the window.
 
@@ -42,7 +42,7 @@ Native tabs implement navigation, history, private windows, downloads, screensho
 
 ## Password manager
 
-Open Password Manager from Aero. Configure Windows Hello in Windows Settings > Accounts > Sign-in options. Aero never asks for your Windows password. A Windows-owned, window-bound authentication prompt gates sensitive operations; unavailable or cancelled authentication fails closed.
+Open Password Manager from **Settings > Privacy & shields** or from the import screen. The Windows WebView2 launch conflict is fixed in the current portable build (included in the current release). See [PASSWORD-TRANSFER-UPDATE.md](PASSWORD-TRANSFER-UPDATE.md). Configure Windows Hello in Windows Settings > Accounts > Sign-in options. Aero never asks for your Windows password. A Windows-owned, window-bound authentication prompt gates sensitive operations; unavailable or cancelled authentication fails closed.
 
 The Rust backend uses AES-256-GCM and a random key protected by current-user Windows DPAPI. It uses the existing compatible Aero vault format at `%APPDATA%/Aero/password-vault.json`. Do not run both versions while editing that shared vault. Use encrypted backups from Password Manager; they require the original Windows DPAPI keys and are not portable recovery backups.
 
@@ -72,3 +72,8 @@ Only checked categories are cleared. Download-history clearing keeps downloaded 
 The icon has a transparent exterior in both the interface and Windows executable. The updated version has its own portable filename.
 
 See [SETTINGS-UPDATE.md](SETTINGS-UPDATE.md) for the latest verification results, cleanup backup locations, and icon-edit provenance. The earlier REPAIR-REPORT.md describes the initial October 14 port.
+
+
+## Automatic updates
+
+Aero 1.0.4 adds signed automatic updates from public GitHub releases. Updates download quietly while Aero is open, and the next ordinary launch uses the verified new version from the same shortcut and profile. See [AUTO-UPDATE.md](AUTO-UPDATE.md) for the feed, recovery behavior, tests, and publishing instructions. Copies of 1.0.3 and earlier need the updater-enabled build once. Release signing stays on the publisher’s computer; no private signing key or account token is embedded in the browser or public repository.

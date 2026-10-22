@@ -5,7 +5,18 @@ export interface PasswordManagerEntry {
   updated_at: number;
 }
 
+export interface PasswordTransferStatus {
+  active: boolean;
+  id?: string;
+  source?: string;
+  folder?: string;
+  files?: Array<{ id: string; name: string; bytes: number }>;
+  message?: string;
+}
 interface PasswordManagerAPI {
+  transferStatus(): Promise<PasswordTransferStatus>;
+  cancelTransfer(): Promise<boolean>;
+  importTransfer(session: string, file: string): Promise<{ imported: number; skipped: number; message: string }>;
   lock(): Promise<boolean>;
   activity(): void;
   list(): Promise<PasswordManagerEntry[]>;

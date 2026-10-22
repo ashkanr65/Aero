@@ -277,8 +277,15 @@ export const App: React.FC = () => {
 
   const openPasswordImport = useCallback(async () => {
     try { await window.aero.openPasswordManager(); }
-    catch (cause) { window.alert(cause instanceof Error ? cause.message : 'Password Manager could not be opened.'); }
+    catch (cause) { setImportHelpError(cause instanceof Error ? cause.message : 'Password Manager could not be opened.'); }
   }, []);
+
+  const startPasswordTransfer = useCallback(async () => {
+    if (!importSummary) return;
+    setImportHelpError('');
+    try { await window.aero.startPasswordTransfer({ source: importSummary.source, profileId: importSummary.profileName ? importSummary.profileId : undefined }); }
+    catch (cause) { setImportHelpError(cause instanceof Error ? cause.message : 'Password transfer could not start.'); }
+  }, [importSummary]);
 
   const saveSubmittedCredential = async () => {
     try {
@@ -375,7 +382,7 @@ export const App: React.FC = () => {
         <Sidebar state={state} open={sidebarOpen && !overlayOpen} width={sidebarWidths.rightSidebarWidth} onResizeStart={beginResize('right')} tool={sidebarTool} onTool={setSidebarTool} onClose={() => setSidebarOpen(false)} command={command} />
       </div>
 
-      {settingsOpen && <SettingsPanel section={settingsSection} onSectionChange={setSettingsSection} clearRequest={clearRequest} privateMode={privateMode} onClearBrowsingData={clearBrowsingData} importContent={<ImportSection summary={importSummary} helpError={importHelpError} onStart={startImport} onReset={resetImport} onApply={applyImport} onSourcePasswords={() => void openSourcePasswords()} onImportPasswords={() => void openPasswordImport()} />} settings={settings} onChange={saveSettings} onReset={() => void window.aero.resetSettings().then(next => { setSettings(next); setSidebarWidths(next.layout); setSidebarOpen(next.appearance.sidebarOpen); })} onChooseDownloadDirectory={() => void chooseDownloadDirectory()} onOpenImport={openImport} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsPanel section={settingsSection} onSectionChange={setSettingsSection} clearRequest={clearRequest} privateMode={privateMode} onClearBrowsingData={clearBrowsingData} importContent={<ImportSection summary={importSummary} helpError={importHelpError} onStart={startImport} onReset={resetImport} onApply={applyImport} onSourcePasswords={() => void openSourcePasswords()} onImportPasswords={() => void openPasswordImport()} onTransferPasswords={() => void startPasswordTransfer()} />} settings={settings} onChange={saveSettings} onReset={() => void window.aero.resetSettings().then(next => { setSettings(next); setSidebarWidths(next.layout); setSidebarOpen(next.appearance.sidebarOpen); })} onChooseDownloadDirectory={() => void chooseDownloadDirectory()} onOpenImport={openImport} onClose={() => setSettingsOpen(false)} />}
       {panel && <BrowserPanel type={panel} state={state} history={history} favorites={favorites} downloads={downloads} onRemoveHistory={removeHistory} onClearHistory={clearHistory} onClearBrowsingData={clearBrowsingData} onRemoveFavorite={removeFavorite} onClose={() => setPanel(null)} command={command} />}
     </div>
   );

@@ -3,7 +3,11 @@ import type { BrowserSettings } from '../shared/settings';
 import type { BrowserState, DownloadRecord, ShortcutAction } from '../renderer/src/types';
 import type { ImportSource, ImportSummary } from '../renderer/src/types-import';
 
+export interface UpdateStatus { version: string; state: string; message: string; nextVersion?: string | null; }
+
 export interface ExposedAPI {
+  getUpdateStatus(): Promise<UpdateStatus>;
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void;
   clearBrowsingData(request: ClearDataRequest): Promise<ClearDataResult>;
   onBrowsingDataCleared(listener: (result: ClearDataResult) => void): () => void;
   getState: () => Promise<BrowserState | null>;
@@ -30,6 +34,7 @@ export interface ExposedAPI {
   resetShortcutMapping: () => Promise<Record<string, string>>;
   passwordManagerAvailability: () => Promise<{ available: boolean; message?: string }>;
   openPasswordManager: () => Promise<boolean>;
+  startPasswordTransfer: (payload: { source: ImportSource; profileId?: string }) => Promise<boolean>;
   fillSelectedCredential: () => Promise<boolean>;
   onCredentialFillReady: (listener: (origin: string) => void) => () => void;
   onCredentialFillOffer: (listener: (offer: { origin: string; username: string }) => void) => () => void;

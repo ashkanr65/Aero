@@ -1,6 +1,6 @@
 [package]
 name = "aero-rust-browser"
-version = "1.0.3"
+version = "1.0.4"
 description = "Aero Browser with a native Rust backend"
 authors = ["Aero Team"]
 license = "MIT"
@@ -29,6 +29,9 @@ rfd = "0.16"
 arboard = "3"
 dirs = "7"
 csv = "1"
+ed25519-dalek = "3"
+semver = "1"
+sha2 = "0.10"
 adblock = "0.13.2"
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls"] }
 rusqlite = { version = "0.32.1", features = ["bundled", "backup"] }

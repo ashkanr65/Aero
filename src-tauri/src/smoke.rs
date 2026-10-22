@@ -111,6 +111,9 @@ async fn run(app: &AppHandle) -> Result<Value, String> {
         return Err("Settings cover the window controls".into());
     }
     settings_checks(app, &shell, owner).await?;
+    if eval(&shell,&format!("window.aero.getUpdateStatus().then(s=>s.version==={}&&s.state==='development')",json!(env!("CARGO_PKG_VERSION")))).await?!=true {return Err("Updater status did not reach the trusted interface".into());}
+    if eval(&shell,"window.__TAURI_INTERNALS__.invoke('aero_request',{method:'browser:update-install',payload:{url:'https://evil.test/a.exe'}}).then(()=>false,()=>true)").await?!=true {return Err("Renderer could request an arbitrary update".into());}
+    password_transfer_checks(app, &shell, owner).await?;
     eval(
         &shell,
         "document.querySelector('[aria-label=\"Close settings\"]').click();true",
@@ -288,6 +291,7 @@ async fn run(app: &AppHandle) -> Result<Value, String> {
     if eval(&private_shell, "window.aero.getState()").await?["privateMode"] != true {
         return Err("Private browsing state did not reach the UI".into());
     }
+    if eval(&private_shell,"window.aero.startPasswordTransfer({source:'edge'}).then(()=>false,()=>true)").await? != true { return Err("Private browsing could start password transfer".into()); }
     if crate::vault::open(app, &private).is_ok() {
         return Err("Private window could open a vault".into());
     }
@@ -333,7 +337,7 @@ async fn run(app: &AppHandle) -> Result<Value, String> {
         return Err("Minimizing did not revoke pending credentials".into());
     }
     Ok(
-        json!({"passed":true,"checks":["shell RPC","shared Aero UI","multiword address typing","native address shortcut focus","persistent suggestion window","suggestion feedback prevention","rapid address refocus","Escape dismissal","typing without matches","suggestion selection navigation","address Enter navigation","horizontal widths","split migration","split resize","pane swap","settings caption controls","webpage IPC rejection","native Web Audio","mute","isolated autofill","prototype override resistance","hidden field rejection","private UI","private vault denial","settings persistence","trusted submission save offer","scripted submission rejection","minimize and vault locking","native browsing data clearing","clear on exit","spellcheck preference","password manager privacy layout","restore defaults privacy placement","import settings frame","automatic browser profile detection","profile chooser","selective browser import","import retry deduplication","imported history timestamps","partial browser import","password transfer guidance","stale import result cancellation","private import denial","clear data selection controls","native time-limited clearing","history time-range preservation","unselected data preservation","invalid clear request rejection","private profile cleanup isolation","minimum-width settings layout","theme selection styling"]}),
+        json!({"passed":true,"checks":["shell RPC","shared Aero UI","multiword address typing","native address shortcut focus","persistent suggestion window","suggestion feedback prevention","rapid address refocus","Escape dismissal","typing without matches","suggestion selection navigation","address Enter navigation","horizontal widths","split migration","split resize","pane swap","settings caption controls","webpage IPC rejection","native Web Audio","mute","isolated autofill","prototype override resistance","hidden field rejection","private UI","private vault denial","settings persistence","trusted submission save offer","scripted submission rejection","minimize and vault locking","native browsing data clearing","clear on exit","spellcheck preference","password manager privacy layout","restore defaults privacy placement","import settings frame","automatic browser profile detection","profile chooser","selective browser import","import retry deduplication","imported history timestamps","partial browser import","automatic update status","update command rejection","password transfer guidance","vault launch with existing suggestions","vault close and reopen","multiple vault windows","new export detection","existing export exclusion","filename confirmation without secret disclosure","invalid export rejection","transfer cancellation","transfer owner isolation","transfer IPC denial","stale import result cancellation","private import denial","clear data selection controls","native time-limited clearing","history time-range preservation","unselected data preservation","invalid clear request rejection","private profile cleanup isolation","minimum-width settings layout","theme selection styling"]}),
     )
 }
 pub fn start(app: AppHandle) {
@@ -589,4 +593,48 @@ async fn screenshot(app: &AppHandle, view: &tauri::Webview, name: &str) -> Resul
     let value=crate::platform::cdp(view,"Page.captureScreenshot",json!({"format":"png"})).await?;
     let data=base64::engine::general_purpose::STANDARD.decode(value["data"].as_str().ok_or("Screenshot unavailable")?).map_err(|e|e.to_string())?;
     std::fs::write(app.state::<Browser>().profile.join(name),data).map_err(|e|e.to_string())
+}
+
+async fn password_transfer_checks(app: &AppHandle, shell: &tauri::Webview, owner: &str) -> Result<(),String> {
+    let folder=app.state::<Browser>().profile.join("Synthetic Downloads");
+    std::fs::create_dir_all(&folder).map_err(|e|e.to_string())?;
+    let csv="name,url,username,password\nSynthetic,https://example.test/login,synthetic-user,synthetic-transfer-secret\n";
+    std::fs::write(folder.join("existing.csv"),csv).map_err(|e|e.to_string())?;
+    eval(shell,"window.aero.startPasswordTransfer({source:'edge'})").await?;
+    let vault=app.get_webview(&format!("vault-{owner}")).ok_or("Password Manager did not open")?;
+    ready(&vault,"!!window.aeroPasswordManager && !!document.querySelector('[data-password-transfer]')").await?;
+    if eval(&vault,"document.body.textContent.includes(String.fromCharCode(194))").await? != false { return Err("Password Manager text encoding is damaged".into()); }
+    std::fs::write(folder.join("new-export.csv"),csv).map_err(|e|e.to_string())?;
+    ready(&vault,"document.querySelectorAll('[data-transfer-file]').length===1").await?;
+    let status=eval(&vault,"window.aeroPasswordManager.transferStatus()").await?;
+    if status["files"][0]["name"]!="new-export.csv" || status.to_string().contains("synthetic-transfer-secret") || eval(&vault,"document.body.textContent.includes('synthetic-transfer-secret')").await?!=false { return Err("Transfer disclosed a secret or offered an existing CSV".into()); }
+    let token=status["files"][0]["id"].as_str().ok_or("No candidate token")?;
+    let session=status["id"].as_str().ok_or("No transfer session")?;
+    if eval(&vault,"window.aeroPasswordManager.importTransfer('wrong-session','bad-token').then(()=>false,()=>true)").await?!=true { return Err("Transfer accepted forged selection tokens".into()); }
+    let other=browser::window(app,false)?;
+    crate::vault::open(app,&other)?;
+    let other_vault=app.get_webview(&format!("vault-{other}")).ok_or("Second Password Manager failed")?;
+    ready(&other_vault,"!!window.aeroPasswordManager").await?;
+    if eval(&other_vault,&format!("window.aeroPasswordManager.importTransfer({},{}).then(()=>false,()=>true)",json!(session),json!(token))).await?!=true { return Err("Another window could select this transfer".into()); }
+    crate::vault::lock(app,&other);
+    browser::command(app,&other,"close-window",Value::Null).await?;
+    std::fs::write(folder.join("invalid.csv"),"url,title\nhttps://example.test,Synthetic").map_err(|e|e.to_string())?;
+    ready(&vault,"document.querySelectorAll('[data-transfer-file]').length===2").await?;
+    eval(&vault,"[...document.querySelectorAll('[data-transfer-file]')].find(b=>b.parentElement.textContent.includes('invalid.csv')).click();true").await?;
+    ready(&vault,"document.querySelector('[role=alert]')?.textContent.includes('username column')").await?;
+    screenshot(app,&vault,"password-transfer.png").await?;
+    eval(&vault,"window.aeroPasswordManager.cancelTransfer()").await?;
+    if eval(&vault,&format!("window.aeroPasswordManager.importTransfer({},{}).then(()=>false,()=>true)",json!(session),json!(token))).await?!=true { return Err("Cancelled transfer tokens remained usable".into()); }
+    if eval(shell,"window.__TAURI_INTERNALS__.invoke('aero_request',{method:'password-manager:transfer-status',payload:null}).then(()=>false,()=>true)").await?!=true { return Err("Shell could access transfer selections".into()); }
+    if std::fs::read_to_string(folder.join("new-export.csv")).map_err(|e|e.to_string())?!=csv {return Err("Cancelled transfer modified its source export".into());}
+    // Closing/minimizing and private windows must revoke the whole transfer session.
+    eval(shell,"window.aero.startPasswordTransfer({source:'edge'})").await?;
+    crate::vault::lock(app,owner);
+    if app.state::<Browser>().windows.lock().unwrap().get(owner).unwrap().transfer.is_some() {return Err("Vault locking retained an export session".into());}
+    for _ in 0..40 {if app.get_webview(&format!("vault-{owner}")).is_none(){break;}tokio::time::sleep(std::time::Duration::from_millis(50)).await;}
+    crate::vault::open(app,owner)?;
+    let reopened=app.get_webview(&format!("vault-{owner}")).ok_or("Password Manager could not reopen")?;
+    ready(&reopened,"document.querySelector('h1')?.textContent==='Aero Password Manager'").await?;
+    crate::vault::lock(app,owner);
+    Ok(())
 }

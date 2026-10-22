@@ -9,13 +9,14 @@ interface Props {
   onApply(selection: ImportSelection): void;
   onSourcePasswords(): void;
   onImportPasswords(): void;
+  onTransferPasswords(): void;
   onReset(): void;
 }
 const SOURCES: Array<{id: ImportSource; name: string}> = [
   {id: 'edge', name: 'Microsoft Edge'}, {id: 'chrome', name: 'Google Chrome'},
   {id: 'firefox', name: 'Mozilla Firefox'}, {id: 'opera', name: 'Opera'},
 ];
-export const ImportSection: React.FC<Props> = ({ summary, helpError, onStart, onApply, onSourcePasswords, onImportPasswords, onReset }) => {
+export const ImportSection: React.FC<Props> = ({ summary, helpError, onStart, onApply, onSourcePasswords, onImportPasswords, onTransferPasswords, onReset }) => {
   const [selection, setSelection] = useState<ImportSelection>({ bookmarks: true, history: true });
   useEffect(() => setSelection({ bookmarks: true, history: true }), [summary?.source, summary?.profileId]);
   const name = SOURCES.find(s => s.id === summary?.source)?.name ?? 'Browser';
@@ -47,9 +48,9 @@ export const ImportSection: React.FC<Props> = ({ summary, helpError, onStart, on
           {!busy && <div className="flex flex-wrap gap-2"><button className="secondary-button" data-import-retry onClick={() => onStart(summary.source, summary.profileName ? summary.profileId : undefined)}>Detect again / retry</button><button className="secondary-button" data-import-browse onClick={() => onStart(summary.source, undefined, true)}>Choose a custom profile folder…</button></div>}
           {!busy && summary.stage !== 'choose-profile' && <section className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-zinc-700" data-import-password-guide>
             <h3 className="flex items-center gap-2 font-semibold"><KeyRound size={16}/>Transfer saved passwords</h3>
-            <p className="text-sm text-slate-600 dark:text-slate-300">{name} protects saved passwords separately. Aero can open its password settings, but the source browser must approve the export.</p>
-            <ol className="list-inside list-decimal space-y-2 text-sm text-slate-600 dark:text-slate-300"><li>Open {name} password settings below.</li><li>Choose Export passwords (usually in Settings or the three-dot menu), approve its confirmation, and save the CSV file.</li><li>Open Aero Password Manager below, choose Import CSV passwords, and approve Windows authentication.</li></ol>
-            <div className="flex flex-wrap gap-2"><button className="secondary-button" data-import-open-passwords onClick={onSourcePasswords}>Open {name} password settings</button><button className="secondary-button" onClick={onImportPasswords}>Open Aero Password Manager</button></div>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{name} protects saved passwords separately. Aero can open its password settings and detect a new export in Downloads. You approve the export in the source browser and the import with Windows Hello.</p>
+            <ol className="list-inside list-decimal space-y-2 text-sm text-slate-600 dark:text-slate-300"><li>Choose Transfer passwords below to open both password managers.</li><li>In {name}, choose Export passwords and approve its confirmation. Save a new CSV in Downloads.</li><li>Return to Aero Password Manager. Confirm the detected filename and approve Windows Hello. Aero handles the file transfer and encryption.</li></ol>
+            <div className="flex flex-wrap gap-2"><button className="primary-button" data-import-transfer-passwords onClick={onTransferPasswords}>Transfer passwords from {name}</button><button className="secondary-button" data-import-open-passwords onClick={onSourcePasswords}>Open {name} password settings</button><button className="secondary-button" onClick={onImportPasswords}>Open Aero Password Manager</button></div>
             {helpError && <p role="alert" className="text-sm text-amber-700 dark:text-amber-400">{helpError}</p>}
             <p className="text-xs text-slate-500 dark:text-slate-400">The exported CSV contains readable passwords. Delete it after a successful import. Aero stores imported passwords in its encrypted local vault.</p>
           </section>}

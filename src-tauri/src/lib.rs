@@ -3,10 +3,12 @@ mod browser;
 mod filters;
 mod model;
 mod password_vault;
+mod password_transfer;
 mod platform;
 mod settings;
 mod shields;
 mod storage;
+mod update;
 mod vault;
 use model::Browser;
 use serde_json::{Value, json};
@@ -62,6 +64,7 @@ async fn aero_request(
         return vault::request(&app, &owner, &method, payload).await;
     }
     match method.as_str() {
+        "browser:update-status" => Ok(update::status()),
         "browser:get-state" => {
             let s = state.settings.lock().unwrap().clone();
             Ok(state
@@ -113,6 +116,10 @@ async fn aero_request(
                 .map(|f| f.path().to_string_lossy().to_string())
                 .unwrap_or_default()
         )),
+        "browser:start-password-transfer" => {
+            vault::start_transfer(&app, &owner, payload).await?;
+            Ok(json!(true))
+        }
         "browser:open-password-manager" => {
             vault::open(&app, &owner)?;
             Ok(json!(true))
@@ -145,13 +152,14 @@ mod smoke;
 mod submission;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if update::bootstrap() { return; }
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![aero_request])
         .setup(|app| {
             let profile = if let Some(path) = std::env::var_os("AERO_RUST_TEST_PROFILE") {
                 std::path::PathBuf::from(path)
             } else {
-                let executable = std::env::current_exe()?;
+                let executable = update::launch_executable().map_err(std::io::Error::other)?;
                 if executable
                     .file_name()
                     .and_then(|s| s.to_str())
@@ -192,6 +200,7 @@ pub fn run() {
                 });
             }
             browser::window(app.handle(), false).map_err(std::io::Error::other)?;
+            update::start(app.handle());
             if smoke::enabled() {
                 smoke::start(app.handle().clone());
             }

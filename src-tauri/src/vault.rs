@@ -51,17 +51,55 @@ pub fn open(app: &AppHandle, owner: &str) -> Result<(), String> {
     }
     let app_event = app.clone();
     let name = owner.to_string();
-    let window =
+    // Different WebView2 environment options require a different user-data directory.
+    // Suggestions already own the default environment before this window opens.
+    let ui_profile =
+        app.state::<Browser>()
+            .profile
+            .join(if app.state::<Browser>().startup_gpu_disabled {
+                "Vault UI Software"
+            } else {
+                "Vault UI"
+            });
+    let mut builder =
         WebviewWindowBuilder::new(app, &label, WebviewUrl::App("password-manager.html".into()))
             .additional_browser_args(if app.state::<Browser>().startup_gpu_disabled{"--disable-gpu --disable-gpu-compositing --disable-accelerated-video-decode --disable-accelerated-video-encode"}else{""})
+            .data_directory(ui_profile)
             .use_https_scheme(true)
+            .general_autofill_enabled(false)
             .title("Aero Password Manager")
             .inner_size(840., 700.)
             .min_inner_size(620., 500.)
             .skip_taskbar(true)
-            .on_navigation(|url| browser::trusted_url(url, "password-manager.html"))
-            .build()
-            .map_err(|e| e.to_string())?;
+            .on_navigation(|url| browser::trusted_url(url, "password-manager.html"));
+    if crate::smoke::enabled() {
+        builder = builder.position(-10000., -10000.).focused(false);
+    }
+    let window = builder.build().map_err(|_| "Password Manager could not open its Windows web view. Close all Aero windows and reopen Aero, then try again.")?;
+    let (settings_send, settings_receive) = std::sync::mpsc::channel();
+    window
+        .with_webview(move |native| {
+            use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings4;
+            use windows::core::Interface;
+            let result = (|| -> windows::core::Result<()> {
+                unsafe {
+                    let settings = native
+                        .controller()
+                        .CoreWebView2()?
+                        .Settings()?
+                        .cast::<ICoreWebView2Settings4>()?;
+                    settings.SetIsPasswordAutosaveEnabled(false)?;
+                    settings.SetIsGeneralAutofillEnabled(false)?;
+                    Ok(())
+                }
+            })();
+            let _ = settings_send.send(result.is_ok());
+        })
+        .map_err(|_| "Password Manager could not configure protected input settings")?;
+    if settings_receive.recv_timeout(Duration::from_secs(5)).ok() != Some(true) {
+        let _ = window.close();
+        return Err("Password Manager could not disable Windows web-view password storage. Update Microsoft Edge WebView2 Runtime and retry.".into());
+    }
     let hwnd = window.hwnd().map_err(|e| e.to_string())?.0 as isize;
     if let Some(w) = app
         .state::<Browser>()
@@ -77,6 +115,7 @@ pub fn open(app: &AppHandle, owner: &str) -> Result<(), String> {
             let state = app_event.state::<Browser>();
             if let Some(w) = state.windows.lock().unwrap().get_mut(&name) {
                 w.vault_hwnd = None;
+                w.transfer = None;
                 w.epoch += 1;
                 w.auth_busy = false;
                 w.selected = None;
@@ -94,12 +133,14 @@ pub fn lock(app: &AppHandle, owner: &str) {
     let hwnd = {
         let state = app.state::<Browser>();
         let all = state.windows.lock().unwrap();
-        all.get(owner).map(|w| w.auth_hwnd.or(w.vault_hwnd).unwrap_or(w.native_hwnd))
+        all.get(owner)
+            .map(|w| w.auth_hwnd.or(w.vault_hwnd).unwrap_or(w.native_hwnd))
     };
     let expected = {
         let state = app.state::<Browser>();
         let mut all = state.windows.lock().unwrap();
         let Some(w) = all.get_mut(owner) else { return };
+        w.transfer = None;
         w.epoch += 1;
         w.auth_busy = false;
         w.auth_hwnd = None;
@@ -126,7 +167,12 @@ async fn native_operation(
     operation: &str,
     payload: Value,
     require_vault: bool,
+    expected_epoch: Option<u64>,
 ) -> Result<Value, String> {
+    let mut protected = crate::password_transfer::Parsed {
+        payload,
+        skipped: 0,
+    };
     if require_vault
         && app
             .state::<Browser>()
@@ -140,25 +186,30 @@ async fn native_operation(
         return Err("The vault window closed before this operation".into());
     }
     let hwnd = handle(app, owner)?;
-    let epoch = {
+    let (epoch, native_epoch) = {
         let state = app.state::<Browser>();
         let mut all = state.windows.lock().unwrap();
         let w = all.get_mut(owner).ok_or("Browser window closed")?;
         if w.private {
             return Err("Password Manager is unavailable in private windows".into());
         }
+        if expected_epoch.is_some_and(|e| e != w.epoch) {
+            crate::password_transfer::wipe(&mut protected.payload);
+            return Err("The password transfer was cancelled or locked".into());
+        }
         if w.auth_busy {
             return Err("Another Windows authentication request is in progress".into());
         }
+        let native_epoch = crate::password_vault::epoch(hwnd)?;
         w.auth_busy = true;
         w.auth_hwnd = Some(hwnd);
         w.last_vault = Instant::now();
-        w.epoch
+        (w.epoch, native_epoch)
     };
-    let native_epoch = crate::password_vault::epoch(hwnd)?;
     let backup = operation == "backup";
     let operation = operation.to_string();
-    let input = zeroize::Zeroizing::new(payload.to_string());
+    let input = zeroize::Zeroizing::new(protected.payload.to_string());
+    crate::password_transfer::wipe(&mut protected.payload);
     let result = tauri::async_runtime::spawn_blocking(move || {
         crate::password_vault::operation(&operation, &input, hwnd, native_epoch)
     })
@@ -195,7 +246,7 @@ async fn native(
     operation: &str,
     payload: Value,
 ) -> Result<Value, String> {
-    native_operation(app, owner, operation, payload, true).await
+    native_operation(app, owner, operation, payload, true, None).await
 }
 async fn native_shell(
     app: &AppHandle,
@@ -203,7 +254,7 @@ async fn native_shell(
     operation: &str,
     payload: Value,
 ) -> Result<Value, String> {
-    native_operation(app, owner, operation, payload, false).await
+    native_operation(app, owner, operation, payload, false, None).await
 }
 pub async fn request(
     app: &AppHandle,
@@ -372,58 +423,75 @@ pub async fn request(
             .await?;
             Ok(json!(true))
         }
+        "password-manager:transfer-status" => {
+            let mut all = state.windows.lock().unwrap();
+            let w = all.get_mut(owner).ok_or("Browser window closed")?;
+            if w.transfer.as_ref().is_some_and(|t| t.expired()) {
+                w.transfer = None;
+                return Ok(
+                    json!({"active":false,"message":"Password transfer expired. Start again from Import browser data."}),
+                );
+            }
+            match w.transfer.as_mut() {
+                Some(t) => t.status(),
+                None => Ok(json!({"active":false})),
+            }
+        }
+        "password-manager:transfer-cancel" => {
+            let hwnd = {
+                let mut all = state.windows.lock().unwrap();
+                let w = all.get_mut(owner).ok_or("Browser window closed")?;
+                w.transfer = None;
+                w.epoch += 1;
+                w.auth_busy = false;
+                w.auth_hwnd.take()
+            };
+            if let Some(hwnd) = hwnd {
+                crate::password_vault::cancel(hwnd);
+            }
+            Ok(json!(true))
+        }
+        "password-manager:transfer-import" => {
+            let (path, epoch, session_id) = {
+                let all = state.windows.lock().unwrap();
+                let w = all.get(owner).ok_or("Browser window closed")?;
+                let session = w.transfer.as_ref().ok_or("Start password transfer again")?;
+                let path = session.selected(
+                    payload["session"].as_str().ok_or("Invalid transfer")?,
+                    payload["file"].as_str().ok_or("Choose an export")?,
+                )?;
+                (path, w.epoch, session.id.clone())
+            };
+            let result = import_file(app, owner, path, Some(epoch)).await?;
+            let mut all = state.windows.lock().unwrap();
+            if let Some(w) = all.get_mut(owner) {
+                if w.transfer.as_ref().is_some_and(|t| t.id == session_id) {
+                    w.transfer = None;
+                }
+            }
+            Ok(result)
+        }
         "password-manager:import-csv" => {
+            let epoch = state
+                .windows
+                .lock()
+                .unwrap()
+                .get(owner)
+                .ok_or("Browser window closed")?
+                .epoch;
             let Some(file) = rfd::AsyncFileDialog::new()
+                .set_title("Choose the password CSV exported by your browser")
                 .add_filter("CSV password export", &["csv"])
                 .pick_file()
                 .await
             else {
                 return Ok(json!({"imported":0,"skipped":0,"message":"Import cancelled."}));
             };
-            if std::fs::metadata(file.path())
-                .map_err(|_| "CSV unavailable")?
-                .len()
-                > 8 * 1024 * 1024
-            {
-                return Err("CSV exceeds 8 MiB".into());
+            let result = import_file(app, owner, file.path().to_path_buf(), Some(epoch)).await?;
+            if let Some(w) = state.windows.lock().unwrap().get_mut(owner) {
+                w.transfer = None;
             }
-            let text = zeroize::Zeroizing::new(
-                String::from_utf8(file.read().await).map_err(|_| "CSV must be UTF-8")?,
-            );
-            let mut csv = csv::Reader::from_reader(text.as_bytes());
-            let headers = csv
-                .headers()
-                .map_err(|_| "CSV headers are invalid")?
-                .clone();
-            let index = |names: &[&str]| {
-                headers
-                    .iter()
-                    .position(|v| names.contains(&v.trim().to_lowercase().as_str()))
-            };
-            let website = index(&["url", "origin", "website", "login_uri"])
-                .ok_or("CSV has no website column")?;
-            let user = index(&["username", "user", "login_username"])
-                .ok_or("CSV has no username column")?;
-            let password =
-                index(&["password", "login_password"]).ok_or("CSV has no password column")?;
-            let mut entries = vec![];
-            let mut skipped = 0;
-            for row in csv.records() {
-                let row = row.map_err(|_| "CSV is malformed")?;
-                if let Some(origin) = crate::model::origin(row.get(website).unwrap_or("")) {
-                    let u = row.get(user).unwrap_or("");
-                    let p = row.get(password).unwrap_or("");
-                    if !u.is_empty() && !p.is_empty() && u.len() <= 512 && p.len() <= 8192 {
-                        entries.push(json!({"origin":origin,"username":u,"password":p}));
-                        continue;
-                    }
-                }
-                skipped += 1;
-            }
-            let result = native(app, owner, "import", json!({"entries":entries})).await?;
-            Ok(
-                json!({"imported":result["imported"],"skipped":skipped,"message":"Passwords imported into the local encrypted vault."}),
-            )
+            Ok(result)
         }
         "password-manager:select-for-fill" => {
             let id = payload.as_str().ok_or("Select a credential")?;
@@ -627,6 +695,7 @@ pub fn revoke(app: &AppHandle, owner: &str) {
     let state = app.state::<Browser>();
     let mut all = state.windows.lock().unwrap();
     if let Some(w) = all.get_mut(owner) {
+        w.transfer = None;
         w.epoch += 1;
         w.auth_busy = false;
         w.selected = None;
@@ -659,4 +728,70 @@ pub fn closed(app: &AppHandle, owner: &str) {
             }
         });
     }
+}
+
+// A shell can initiate the handoff, but only its isolated vault can select/read an export.
+static TRANSFER_START: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub async fn start_transfer(app: &AppHandle, owner: &str, payload: Value) -> Result<(), String> {
+    let _guard = TRANSFER_START.lock().await;
+    let state = app.state::<Browser>();
+    let epoch = {
+        let all = state.windows.lock().unwrap();
+        let w = all.get(owner).ok_or("Browser window closed")?;
+        if w.private {
+            return Err("Transfer passwords from a regular Aero window".into());
+        }
+        if w.auth_busy {
+            return Err("Finish the Windows authentication request first".into());
+        }
+        w.epoch
+    };
+    let source = payload["source"].as_str().ok_or("Choose a browser")?;
+    let folder = if crate::smoke::enabled() {
+        let p = state.profile.join("Synthetic Downloads");
+        std::fs::create_dir_all(&p).map_err(|_| "Synthetic downloads unavailable")?;
+        p
+    } else {
+        dirs::download_dir().ok_or("Windows Downloads could not be located. Open Password Manager and choose Import CSV passwords.")?
+    };
+    let session = crate::password_transfer::Session::begin(folder, source)?;
+    open(app, owner)?;
+    {
+        let mut all = state.windows.lock().unwrap();
+        let w = all.get_mut(owner).ok_or("Browser window closed")?;
+        if w.epoch != epoch || w.vault_hwnd.is_none() {
+            return Err("Password Manager closed or locked. Start transfer again.".into());
+        }
+        w.epoch += 1; // invalidate a previous transfer still parsing its selected export
+        w.transfer = Some(session);
+        w.last_vault = Instant::now();
+    }
+    if !crate::smoke::enabled() {
+        if let Err(message) = crate::imports::import(
+            app,
+            json!({"source":source,"profileId":payload["profileId"],"action":"password-settings"}),
+        )
+        .await
+        {
+            if let Some(w) = state.windows.lock().unwrap().get_mut(owner) {
+                w.transfer = None;
+            }
+            return Err(message);
+        }
+    }
+    Ok(())
+}
+async fn import_file(
+    app: &AppHandle,
+    owner: &str,
+    path: std::path::PathBuf,
+    epoch: Option<u64>,
+) -> Result<Value, String> {
+    let bytes = crate::password_transfer::read_export(&path)?;
+    let mut parsed = crate::password_transfer::parse(&bytes)?;
+    drop(bytes);
+    let result = native_operation(app, owner, "import", parsed.payload.take(), true, epoch).await?;
+    Ok(
+        json!({"imported":result["imported"],"skipped":parsed.skipped,"message":"Passwords imported into the encrypted local vault. Delete the exported CSV when you have checked the result."}),
+    )
 }
