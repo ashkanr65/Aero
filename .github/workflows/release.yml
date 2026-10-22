@@ -32,45 +32,17 @@ jobs:
         shell: pwsh
         run: |
           $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
-          if($env:GITHUB_REF_NAME -ne "v$version"){throw "Tag $($env:GITHUB_REF_NAME) does not match version $version."}
+          if($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version"){throw "Tag $($env:GITHUB_REF_NAME) does not match version $version."}
       - name: Build Windows portable
         run: npm run package:portable
-      # With a signing secret the workflow produces the same signed, updater-ready
-      # release the publisher creates locally.
-      - name: Sign and publish the signed release
-        if: ${{ secrets.AERO_UPDATE_PRIVATE_KEY != '' }}
+      # The signing key only reaches the publishing step, never the build. The
+      # publisher signs and publishes the signed release when the key is present
+      # and publishes the unsigned portable otherwise.
+      - name: Publish the portable to the Releases section
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AERO_UPDATE_PRIVATE_KEY: ${{ secrets.AERO_UPDATE_PRIVATE_KEY }}
           AERO_UPDATE_PRIVATE_KEY_PASSWORD: ${{ secrets.AERO_UPDATE_PRIVATE_KEY_PASSWORD }}
         run: |
-          node scripts/sign-release.cjs
+          node scripts/publish-portable.cjs
           if($LASTEXITCODE){exit $LASTEXITCODE}
-          node scripts/publish-release.cjs
-          if($LASTEXITCODE){exit $LASTEXITCODE}
-      # Without a signing secret the portable is still published for download, but it
-      # stays out of the signed update feed so Aero keeps updating from the signed
-      # latest release.
-      - name: Publish the unsigned portable
-        if: ${{ secrets.AERO_UPDATE_PRIVATE_KEY == '' }}
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $repo=$env:GITHUB_REPOSITORY
-          $tag=$env:GITHUB_REF_NAME
-          $version=(Get-Content package.json -Raw|ConvertFrom-Json).version
-          gh release view $tag --repo $repo --json tagName | Out-Null
-          if($LASTEXITCODE -eq 0){
-            Write-Host "Release $tag already exists; leaving it untouched."
-            exit 0
-          }
-          $exe=(Get-ChildItem portable -Filter 'Aero-Rust-Portable-*-x64.exe'|Select-Object -First 1)
-          if(-not $exe){throw 'The portable executable was not produced.'}
-          $body="Aero $version Windows x64 portable, built by GitHub Actions.`n`nThis build carries no Aero release signature, so it is not offered through the automatic update feed. Aero keeps updating from the signed latest release. Download this portable to test this exact build.`n`nTo publish a signed release for this version, delete this release first, then sign it on the publisher computer with npm run release:publish."
-          $release=gh api --method POST "repos/$repo/releases" -f tag_name=$tag -f target_commitish=$env:GITHUB_SHA -f name="Aero $version" -F draft=false -F prerelease=false -f make_latest=false -f body=$body | ConvertFrom-Json
-          if($LASTEXITCODE){throw 'The GitHub release could not be created.'}
-          $name=[uri]::EscapeDataString($exe.Name)
-          gh api --method POST "repos/$repo/releases/$($release.id)/assets?name=$name" --header "Content-Type: application/octet-stream" --input $exe.FullName
-          if($LASTEXITCODE){throw 'The portable asset could not be uploaded.'}
-          Write-Host "Published $($release.html_url)"

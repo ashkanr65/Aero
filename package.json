@@ -13,9 +13,10 @@
     "package:portable": "tauri build --no-bundle && node scripts/stage-portable.cjs",
     "test": "npm run build && npm run test:settings && cargo test --manifest-path src-tauri/Cargo.toml --locked && npm run test:updater && npm run test:native",
     "test:native": "cargo build --manifest-path src-tauri/Cargo.toml --features custom-protocol --locked && node scripts/native-smoke.cjs",
-    "test:settings": "node --test scripts/browsing-data.test.cjs scripts/import-data.test.cjs scripts/sign-release.test.cjs",
+    "test:settings": "node --test scripts/browsing-data.test.cjs scripts/import-data.test.cjs scripts/sign-release.test.cjs scripts/publish-portable.test.cjs",
     "release:sign": "node scripts/sign-release.cjs",
     "release:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-local.ps1",
+    "release:portable": "node scripts/publish-portable.cjs",
     "test:ci": "npm run build && npm run test:settings && cargo test --manifest-path src-tauri/Cargo.toml --locked && npm run test:updater",
     "test:updater": "cargo build --manifest-path src-tauri/Cargo.toml --example updater_probe --locked && node scripts/updater-integration.cjs",
     "release:version": "node scripts/set-version.cjs"
