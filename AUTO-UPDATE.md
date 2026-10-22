@@ -26,7 +26,9 @@ There is no immediate forced restart, background Windows service, scheduled task
 
 The private release-signing key remains on the publisher's Windows computer at `%LOCALAPPDATA%/AeroPublisher/update-signing.dpapi`, protected with current-user Windows DPAPI. It is not in Git, a release asset, a browser binary, or GitHub Actions secrets. Only signatures and public artifacts are uploaded. Preserve the publisher's Windows profile/DPAPI keys and protected key file: losing this identity prevents signing updates trusted by existing launchers. Key rotation or loss requires a planned migration; do not replace the pinned key casually.
 
-GitHub Actions runs release/build checks without a signing secret. Publishing uses the existing Git credential manager locally. From the publisher computer:
+GitHub Actions runs release/build checks on every push and on every version tag. When the repository holds an `AERO_UPDATE_PRIVATE_KEY` secret, the tagged workflow signs the portable and publishes the complete signed release, which is the same result the local publisher produces. Without that secret the workflow still publishes the portable to the repository's Releases section, but as an unsigned build that stays out of the update feed, so Aero keeps updating from the signed latest release. An unsigned CI release must be deleted before the same version can be published as a signed release, because a public release is never overwritten.
+
+Publishing uses the existing Git credential manager locally. From the publisher computer:
 
 ```powershell
 npm ci
